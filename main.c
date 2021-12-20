@@ -5,6 +5,7 @@
 
 #define CD_BADARG "error: cd: bad arguments\n"
 #define CD_ERROR "error: cd: cannot change directory to "
+#define EXEC_ERROR "error: cannot execute "
 
 typedef	struct s_pipes
 {
@@ -23,6 +24,13 @@ int		ft_strlen(char *s)
 	while (s[++i]);
 	return (i);
 }
+void	x_Error(char *s)
+{
+	write(2, EXEC_ERROR, ft_strlen(EXEC_ERROR));
+	write(2, s, ft_strlen(s));
+	write(2, "\n", 1);
+}
+
 
 void	cd(t_data cmd)
 {
@@ -32,7 +40,7 @@ void	cd(t_data cmd)
 	{
 		write(2, CD_ERROR, ft_strlen(CD_ERROR));
 		write(2, cmd.args[1], ft_strlen(cmd.args[1]));
-		write(2, "\n", ft_strlen(cmd.args[1]));
+		write(2, "\n", 1);
 	}
 }
 
@@ -42,6 +50,8 @@ void	execute(t_data cmd, char **envp, int p)
 	int fd[2];
 	int pid[500], i = 0, infd = 0;
 
+	if (cmd.args[0] == NULL)
+		return;
 	if (strcmp("cd", cmd.args[0]) == 0)
 	{
 		cd(cmd);
@@ -51,7 +61,13 @@ void	execute(t_data cmd, char **envp, int p)
 	{
 		pid[0] = fork();
 		if (pid[0] == 0)
-			execve(cmd.args[0], cmd.args, envp);
+		{
+			if (execve(cmd.args[0], cmd.args, envp) < 0)
+			{
+				x_Error(cmd.args[0]);
+				exit (1);
+			}
+		}
 		else
 			waitpid(pid[0], 0, 0);
 		return ;
@@ -67,7 +83,10 @@ void	execute(t_data cmd, char **envp, int p)
 				dup2(fd[1], 1);
 				close(fd[0]);
 				if (execve(cmd.args[i], cmd.args, envp) < 0)
+				{
+					x_Error(cmd.args[0]);
 					exit (1);
+				}
 			}
 		}
 		else if (i == p)
@@ -78,7 +97,10 @@ void	execute(t_data cmd, char **envp, int p)
 				dup2(infd, 0);
 				close(fd[1]);
 				if (execve(cmd.pipes[i - 1].args[0], cmd.pipes[i - 1].args, envp) < 0)
-					exit (2);
+				{
+					x_Error(cmd.args[0]);
+					exit (1);
+				}
 			}
 		}
 		else
@@ -89,7 +111,10 @@ void	execute(t_data cmd, char **envp, int p)
 				dup2(fd[1], 1);
 				dup2(infd, 0);
 				if (execve(cmd.pipes[i - 1].args[0], cmd.pipes[i - 1].args, envp) < 0)
-					exit (3);
+				{
+					x_Error(cmd.args[0]);
+					exit (1);
+				}
 			}
 		}
 		close(infd);
@@ -100,9 +125,7 @@ void	execute(t_data cmd, char **envp, int p)
 	}
 	i = -1;
 	while(++i < p)
-	{
 		waitpid(pid[i], 0, 0);
-	}
 	close(fd[1]);
 	close(fd[0]);
 }
@@ -116,6 +139,7 @@ int main(int ac, char **av, char **envp)
 	int	i = 0, p = 0;
 	while (*av)
 	{
+		cmd.args[i] = 0;
 		// printf("cmd = %s\n", *av);
 		if (strcmp("|", *av) == 0)
 		{
@@ -148,7 +172,6 @@ int main(int ac, char **av, char **envp)
 			cmd.args[i] = *av;
 		av++;
 		i++;
-		cmd.args[i] = 0;
 	}
 	execute(cmd, envp, p);
 	// i = -1;
